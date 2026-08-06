@@ -1,0 +1,10 @@
+Flask==2.3.0
+pyyaml==6.0
+sentence-transformers==3.0.0
+faiss-cpu==1.8.0
+PyPDF2==3.0.0
+chardet==5.1.0
+boto3==1.28.0
+botocore==1.31.0
+aiofiles==23.1.0
+python-dotenv==1.0.0

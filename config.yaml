@@ -1,0 +1,33 @@
+# POC Configuration
+app:
+  name: Agentic RAG POC
+  debug: true
+  host: 0.0.0.0
+  port: 5000
+  max_upload_size: 50  # MB
+
+embedding:
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  dimension: 384
+  batch_size: 32
+
+vector_store:
+  index_path: "indexes/faiss.index"
+  metadata_path: "indexes/metadata.json"
+
+document_processing:
+  chunk_size: 500  # tokens
+  chunk_overlap: 50
+  max_workers: 3
+
+agent:
+  max_iterations: 5
+  tools:
+    - retrieve_context
+    - call_bedrock
+
+bedrock:
+  region: "us-east-1"
+  model_id: "anthropic.claude-3-5-sonnet-20241022"
+  max_tokens: 2048
+  temperature: 0.7
