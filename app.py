@@ -36,8 +36,7 @@ document_processor = DocumentProcessor(
     max_workers=config["document_processing"]["max_workers"]
 )
 bedrock = BedrockClient(
-    region=config["bedrock"]["region"],
-    model_id=config["bedrock"]["model_id"]
+    region=config["bedrock"]["region"]
 )
 agent = AgentOrchestrator(embedder, vector_store, bedrock)
 
@@ -51,8 +50,7 @@ def status():
     """Get system status."""
     return jsonify({
         "indexed_documents": vector_store.get_size(),
-        "embedding_model": config["embedding"]["model_name"],
-        "bedrock_model": config["bedrock"]["model_id"]
+        "embedding_model": config["embedding"]["model_name"]
     })
 
 @app.route("/api/upload", methods=["POST"])
@@ -123,10 +121,15 @@ def query():
         return jsonify({"error": "Query required"}), 400
 
     query_text = data["query"]
+    model_id = data.get("model")
+    if not model_id:
+        return jsonify({"error": "Model ID required"}), 400
 
     def generate():
         """Stream response from agent."""
         try:
+            # Update the model in the Bedrock client
+            bedrock.model_id = model_id
             for token in agent.reason(query_text):
                 yield f"data: {token}\n\n"
             yield "data: [DONE]\n\n"
