@@ -296,6 +296,13 @@
             <!-- Query Section -->
             <div class="card">
                 <h2>❓ Ask Questions</h2>
+                <div class="model-selector-container" style="margin-bottom: 15px;">
+                    <label for="modelSelector" style="display: block; margin-bottom: 5px; color: #666;">Select a Model:</label>
+                    <select id="modelSelector" class="query-input">
+                        <option value="anthropic.claude-3-sonnet-20240229-v1:0">Anthropic Claude 3 Sonnet</option>
+                        <option value="amazon.titan-text-express-v1">Amazon Titan Text Express</option>
+                    </select>
+                </div>
                 <textarea
                     id="queryInput"
                     class="query-input"
@@ -415,6 +422,7 @@
         // Query handling
         async function submitQuery() {
             const query = document.getElementById('queryInput').value.trim();
+            const model = document.getElementById('modelSelector').value;
             if (!query) return;
 
             const btn = document.getElementById('submitBtn');
@@ -430,7 +438,7 @@
                 const res = await fetch('/api/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
+                    body: JSON.stringify({ query, model })
                 });
 
                 if (!res.ok) throw new Error('Query failed');

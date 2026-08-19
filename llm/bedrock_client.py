@@ -3,55 +3,33 @@ import json
 from typing import Generator
 
 class BedrockClient:
-    """Wrapper for AWS Bedrock Claude model."""
+    """Wrapper for AWS Bedrock models using the Converse API."""
 
-    def __init__(self, region: str = "us-east-1", model_id: str = "anthropic.claude-3-5-sonnet-20241022"):
+    def __init__(self, region: str = "us-east-1", model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0"):
         self.region = region
         self.model_id = model_id
         self.client = boto3.client("bedrock-runtime", region_name=region)
 
     def invoke(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.7) -> str:
-        """Invoke Claude and get response."""
-        payload = {
-            "anthropic_version": "bedrock-2023-06-01",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
-
-        response = self.client.invoke_model(
+        """Invoke model and get response using the Converse API."""
+        
+        response = self.client.converse(
             modelId=self.model_id,
-            body=json.dumps(payload)
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inference_config={"maxTokens": max_tokens, "temperature": temperature}
         )
 
-        result = json.loads(response["body"].read())
-        return result["content"][0]["text"]
+        return response['output']['message']['content'][0]['text']
 
     def invoke_stream(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.7) -> Generator:
-        """Stream Claude response token by token."""
-        payload = {
-            "anthropic_version": "bedrock-2023-06-01",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
+        """Stream model response token by token using the Converse API."""
 
-        response = self.client.invoke_model_with_response_stream(
+        response = self.client.converse_stream(
             modelId=self.model_id,
-            body=json.dumps(payload)
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inference_config={"maxTokens": max_tokens, "temperature": temperature}
         )
 
-        for event in response["body"]:
-            chunk = json.loads(event["chunk"]["bytes"])
-            if chunk["type"] == "content_block_delta":
-                yield chunk["delta"]["text"]
+        for event in response['stream']:
+            if 'contentBlockDelta' in event:
+                yield event['contentBlockDelta']['delta']['text']
