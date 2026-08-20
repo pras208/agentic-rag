@@ -330,19 +330,12 @@
         async function updateStatus() {
             try {
                 const res = await fetch('/api/status');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                if (data.status === 'ok') {
-                    document.getElementById('docCount').textContent = data.indexed_documents || 0;
-                }
+                document.getElementById('docCount').textContent = data.indexed_documents;
             } catch (e) {
                 console.error('Failed to update status:', e);
-                document.getElementById('docCount').textContent = '?';
             }
         }
-
-        // Periodically update status
-        setInterval(updateStatus, 10000);
 
         // Upload handling
         const uploadArea = document.getElementById('uploadArea');
@@ -388,20 +381,6 @@
         }
 
         async function uploadFile(file) {
-            // Validate file
-            const allowedTypes = ['.pdf', '.txt', '.md'];
-            const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-            if (!allowedTypes.includes(fileExt)) {
-                alert(`Unsupported file type: ${fileExt}. Allowed: ${allowedTypes.join(', ')}`);
-                return;
-            }
-
-            const maxSizeMB = 50;
-            if (file.size > maxSizeMB * 1024 * 1024) {
-                alert(`File too large. Max size: ${maxSizeMB}MB`);
-                return;
-            }
-
             const formData = new FormData();
             formData.append('file', file);
 
@@ -409,7 +388,7 @@
             fileItem.className = 'file-item';
             fileItem.innerHTML = `
                 <span>${file.name}</span>
-                <span class="file-status">⏳ Uploading...</span>
+                <span class="file-status">Uploading...</span>
             `;
             fileList.appendChild(fileItem);
 
@@ -420,21 +399,12 @@
                 });
                 const data = await res.json();
 
-                if (res.ok && data.status === 'pending') {
+                if (data.status === 'success') {
                     fileItem.innerHTML = `
                         <span>${file.name}</span>
-                        <span class="file-status">✓ Queued for processing</span>
+                        <span class="file-status">✓ ${data.chunks_indexed} chunks</span>
                     `;
                     updateStatus();
-
-                    // Poll for completion
-                    const jobId = data.job_id;
-                    pollJobStatus(jobId, fileItem, file.name);
-                } else if (data.error) {
-                    fileItem.innerHTML = `
-                        <span>${file.name}</span>
-                        <span class="file-status" style="color: red;">✗ ${data.error}</span>
-                    `;
                 } else {
                     fileItem.innerHTML = `
                         <span>${file.name}</span>
@@ -444,67 +414,22 @@
             } catch (e) {
                 fileItem.innerHTML = `
                     <span>${file.name}</span>
-                    <span class="file-status" style="color: red;">✗ ${e.message}</span>
+                    <span class="file-status" style="color: red;">✗ Failed</span>
                 `;
-                console.error('Upload error:', e);
             }
-        }
-
-        async function pollJobStatus(jobId, fileItem, fileName) {
-            const maxAttempts = 60; // 5 minutes with 5s interval
-            for (let i = 0; i < maxAttempts; i++) {
-                try {
-                    const res = await fetch(`/api/job-status/${jobId}`);
-                    if (!res.ok) continue;
-
-                    const data = await res.json();
-                    if (data.status === 'completed' && data.chunks_indexed) {
-                        fileItem.innerHTML = `
-                            <span>${fileName}</span>
-                            <span class="file-status">✓ ${data.chunks_indexed} chunks indexed</span>
-                        `;
-                        updateStatus();
-                        return;
-                    } else if (data.status === 'failed') {
-                        fileItem.innerHTML = `
-                            <span>${fileName}</span>
-                            <span class="file-status" style="color: red;">✗ ${data.error || 'Processing failed'}</span>
-                        `;
-                        return;
-                    }
-                } catch (e) {
-                    console.error('Poll error:', e);
-                }
-                await new Promise(resolve => setTimeout(resolve, 5000));
-            }
-            fileItem.innerHTML = `
-                <span>${fileName}</span>
-                <span class="file-status" style="color: orange;">⚠ Processing timeout</span>
-            `;
         }
 
         // Query handling
         async function submitQuery() {
             const query = document.getElementById('queryInput').value.trim();
             const model = document.getElementById('modelSelector').value;
-
-            if (!query) {
-                alert('Please enter a query');
-                return;
-            }
-
-            if (query.length > 5000) {
-                alert('Query too long (max 5000 characters)');
-                return;
-            }
+            if (!query) return;
 
             const btn = document.getElementById('submitBtn');
-            const queryInput = document.getElementById('queryInput');
             const responseContent = document.getElementById('responseContent');
             const message = document.getElementById('message');
 
             btn.disabled = true;
-            queryInput.disabled = true;
             btn.textContent = 'Processing...';
             responseContent.innerHTML = '<span class="loading">⏳ Thinking...</span>';
             message.innerHTML = '';
@@ -516,36 +441,29 @@
                     body: JSON.stringify({ query, model })
                 });
 
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    throw new Error(errorData.error || `HTTP ${res.status}`);
-                }
+                if (!res.ok) throw new Error('Query failed');
 
                 responseContent.innerHTML = '';
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
-                let buffer = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-
-                    // Keep the last incomplete line in the buffer
-                    buffer = lines.pop() || '';
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
 
                     for (let line of lines) {
                         if (line.startsWith('data: ')) {
-                            const data = line.substring(6).trim();
+                            const data = line.substring(6);
                             if (data === '[DONE]') {
                                 continue;
                             }
                             if (data.startsWith('ERROR:')) {
-                                responseContent.innerHTML += `<span style="color: red;">${escapeHtml(data)}</span>`;
-                            } else if (data) {
-                                responseContent.innerHTML += escapeHtml(data);
+                                responseContent.innerHTML += `<span style="color: red;">${data}</span>`;
+                            } else {
+                                responseContent.innerHTML += data;
                             }
                             responseContent.scrollTop = responseContent.scrollHeight;
                         }
@@ -554,25 +472,12 @@
 
                 message.innerHTML = '<div class="success">✓ Response complete</div>';
             } catch (e) {
-                responseContent.innerHTML = `<span style="color: red;">Error: ${escapeHtml(e.message)}</span>`;
-                message.innerHTML = `<div class="error">✗ ${escapeHtml(e.message)}</div>`;
-                console.error('Query error:', e);
+                responseContent.innerHTML = `<span class="response-empty">Error: ${e.message}</span>`;
+                message.innerHTML = `<div class="error">✗ ${e.message}</div>`;
             } finally {
                 btn.disabled = false;
-                queryInput.disabled = false;
                 btn.textContent = 'Send Query';
             }
-        }
-
-        function escapeHtml(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.replace(/[&<>"']/g, m => map[m]);
         }
 
         // Allow Enter key to submit
